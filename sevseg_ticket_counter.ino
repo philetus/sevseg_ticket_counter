@@ -19,11 +19,31 @@
  */
 
 #include "SevSeg.h"
+
 SevSeg sevseg; //Instantiate a seven segment controller object
 SevSeg sevseg1; 
 SevSeg sevseg2; 
 
+int advancePin = 2; // pin to advance counter (advances on open circuit)
+int clearPin = 3; // pin to clear counter (resets on closed circuit)
+
+int advanceState;
+int lastAdvanceState = LOW;
+
+// the following variables are unsigned longs because the time, measured in
+// milliseconds, will quickly become a bigger number than can be stored in an int.
+unsigned long lastDebounceTime = 0;  // the last time the output pin was toggled
+unsigned long debounceDelay = 50;    // the debounce time; increase if the output flickers
+
+int dig0 = 0;
+int dig1 = 0;
+int dig2 = 0;
+
 void setup() {
+
+  pinMode(advancePin, INPUT_PULLUP); // internal pullup - when circuit to ground is closed pin reads low
+  pinMode(clearPin, INPUT_PULLUP);   //                   on open circuit pin reads high
+  
   byte numDigits = 1;
   byte digitPins[] = {10};
   byte segmentPins[] = {30, 28, 26, 24, 22, 32, 34};
@@ -60,17 +80,65 @@ void setup() {
 
 void loop() {
 
-  sevseg.setNumber(1, 0);
+  // read the state of the clear pin & reset if circuit is closed (low)
+  int clear = digitalRead(clearPin);
+  if (clear == LOW) {
+    dig0 = 0;
+    dig1 = 0;
+    dig2 = 0;
+  }
+
+  // read the state of the switch into a local variable:
+  int reading = digitalRead(advancePin);
+
+  // check to see if you just pressed the button
+  // (i.e. the input went from LOW to HIGH), and you've waited long enough
+  // since the last press to ignore any noise:
+
+  // If the switch changed, due to noise or pressing:
+  if (reading != lastAdvanceState) {
+    // reset the debouncing timer
+    lastDebounceTime = millis();
+  }
+
+  if ((millis() - lastDebounceTime) > debounceDelay) {
+    // whatever the reading is at, it's been there for longer than the debounce
+    // delay, so take it as the actual current state:
+
+    // if the button state has changed:
+    if (reading != advanceState) {
+      advanceState = reading;
+
+      // only advance counter if new state is high
+      if (advanceState == HIGH) {
+        dig0++;
+        if (dig0 > 9) {
+          dig0 = 0;
+          dig1++;
+          if (dig1 > 9) {
+            dig1 = 0;
+            dig2++;
+            if (dig2 > 9) dig2 = 0;
+          }
+        }
+      }
+    }
+  }
+
+  // save the reading. Next time through the loop, it'll be the lastAdvanceState:
+  lastAdvanceState = reading;
+
+  sevseg.setNumber(dig0, 0);
   //sevseg.blank();
   //sevseg.setChars("-");
   sevseg.refreshDisplay(); // Must run repeatedly
 
-  sevseg1.setNumber(1, 0);
+  sevseg1.setNumber(dig1, 0);
   //sevseg1.blank();
   //sevseg1.setChars("-");
   sevseg1.refreshDisplay(); // Must run repeatedly
 
-  sevseg2.setNumber(1, 0);
+  sevseg2.setNumber(dig2, 0);
   //sevseg2.blank();
   //sevseg2.setChars("-");
   sevseg2.refreshDisplay(); // Must run repeatedly
